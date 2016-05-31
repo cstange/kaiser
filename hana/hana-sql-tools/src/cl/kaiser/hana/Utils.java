@@ -1,5 +1,9 @@
 package cl.kaiser.hana;
 
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -9,8 +13,11 @@ import java.util.List;
 
 public class Utils {
 
-	/*
-	 * Convert ResultSet to List 
+	/**
+	 * Convert ResultSet to List
+	 * @param rs
+	 * @return
+	 * @throws SQLException
 	 */
 	public final static List<HashMap<String,Object>> resultSetToArrayList(ResultSet rs) throws SQLException{
 	  ResultSetMetaData md = rs.getMetaData();
@@ -24,5 +31,18 @@ public class Utils {
 	     list.add(row);
 	  }
 	  return list;
-	}		
+	}	
+
+	/**
+	 * 
+	 * @param path
+	 * @param encoding
+	 * @return
+	 * @throws IOException
+	 */
+	public final static String readFile(String path, Charset encoding) throws IOException 
+	{
+	  byte[] encoded = Files.readAllBytes(Paths.get(path));
+	  return new String(encoded, encoding);
+	}	
 }
