@@ -42,10 +42,21 @@ public class Demo {
 			 Connection con = ds.getConnection();
 	        String pSchema="NEO_9CHCY0XDJBPAEVS15X1S8UZL7";
 	        String pProcedure="demo_sp";        
-	        KProcedure spDemo=new KProcedure(con, pSchema, pProcedure);
+	        KProcedure spDemo=new KProcedure(pSchema, pProcedure);
 	        String dataStrIn = Utils.readFile("input.json", StandardCharsets.UTF_8);	              
-	    	JsonObject call=spDemo.call(dataStrIn);
-	    	System.out.println(call.toString());	        
+	    	JsonObject call=spDemo.call(con, dataStrIn);
+	    	String definition=spDemo.getJsonDefinition();
+	    	System.out.println("DEF-1:\n"+definition);
+	    	System.out.println("CALL:\n"+call.toString());
+
+	    	System.out.println("== FROM CACHE ==");
+	        KProcedure spDemoCache=new KProcedure(pSchema, pProcedure);
+	        spDemoCache.loadDefinitionFromJson(definition);
+	    	JsonObject call2=spDemo.call(con, dataStrIn);
+	    	System.out.println("DEF-2:\n"+spDemoCache.getJsonDefinition());	    	
+	    	System.out.println("CALL:\n"+call2.toString());
+	        
+	    	
 	        			
 		} catch (Exception e) {
 			e.printStackTrace();

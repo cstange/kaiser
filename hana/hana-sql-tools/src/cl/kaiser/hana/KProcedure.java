@@ -1,5 +1,6 @@
 package cl.kaiser.hana;
 
+import java.lang.reflect.Type;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -17,10 +18,12 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 
 /**
  * 
@@ -30,8 +33,7 @@ import com.google.gson.JsonParser;
 public class KProcedure {
 	
 	private static final Logger log		= Logger.getLogger(KProcedure.class.getName());
-	
-	private Connection 	 pcon;
+		
 	private String 		 pSchema;
 	private String 		 pProcedure;
 
@@ -66,22 +68,21 @@ public class KProcedure {
 	 * @param schema
 	 * @param procedureName
 	 */
-	public KProcedure(Connection con,String schema,String procedureName) {
-		pcon		= con;
-		pSchema		= schema;
-		pProcedure	= procedureName;
+	public KProcedure(String schema,String procedureName) {
+		setpSchema(schema);
+		setpProcedure(procedureName);
 	}
-
+	
 	/**
 	 * 
 	 * @throws KProcedureException
 	 */
-	public void loadDefinitionFromDatabase() throws KProcedureException {
+	public void loadDefinitionFromDatabase(Connection pcon) throws KProcedureException {		
 		parameters=new ArrayList<KMetaObj>();	
-		log.log(Level.INFO,"Definition {0} loading",pProcedure);
+		log.log(Level.INFO,"Definition {0} loading",getpProcedure());
     	try (PreparedStatement st = pcon.prepareStatement(sqlProcedure);) {
-    		st.setString(1, pSchema);
-    		st.setString(2, pProcedure);
+    		st.setString(1, getpSchema());
+    		st.setString(2, getpProcedure());
     		try (ResultSet rs=st.executeQuery()) {
     			while (rs!=null && rs.next()){
     				KMetaObj obj=new KMetaObj();
@@ -95,7 +96,7 @@ public class KProcedure {
     				//Table as parameter
     				if (obj.DataType.equals(table_type) && obj.TableName!=null) {    					
     					try (PreparedStatement stype = pcon.prepareStatement(sqlType)) {
-    						stype.setString(1, pSchema);
+    						stype.setString(1, getpSchema());
     						stype.setString(2, obj.TableName);
     						try (ResultSet rtype=stype.executeQuery()) {
     							obj.TableColumns=new ArrayList<KMetaTableObj>();
@@ -112,14 +113,34 @@ public class KProcedure {
     				}    				    				
     			}
     		}
-    		log.log(Level.INFO,"Definition {0} end",pProcedure);
+    		log.log(Level.INFO,"Definition {0} end",getpProcedure());
     	}catch (SQLException er) {
-    		log.log(Level.SEVERE,"can't load definition {0} by SQL exception",pProcedure);
+    		log.log(Level.SEVERE,"can't load definition {0} by SQL exception",getpProcedure());
     		throw new KProcedureException("can't load definition by SQL exception",er);
     	}catch (Exception er) {
-    		log.log(Level.SEVERE,"can't load definition {0} by unmanaged exception",pProcedure);
+    		log.log(Level.SEVERE,"can't load definition {0} by unmanaged exception",getpProcedure());
     		throw new KProcedureException("can't load definition by unmanaged exception",er);
     	}
+	}
+
+	/**
+	 * 
+	 * @return
+	 */
+	public String getJsonDefinition() {
+		Gson gson = new Gson();
+		return gson.toJson(parameters);		
+	}
+		
+	/**
+	 * 
+	 * @param json
+	 * @return 
+	 */
+	public void loadDefinitionFromJson(String json) {
+		Gson gson = new Gson();
+		Type listType = new TypeToken<List<KMetaObj>>() {}.getType();
+		parameters=gson.fromJson(json ,listType);
 	}
 	
 	/**
@@ -128,10 +149,10 @@ public class KProcedure {
 	 * @return
 	 * @throws KProcedureException
 	 */
-	public JsonObject call(String input) throws KProcedureException {
+	public JsonObject call(Connection pcon,String input) throws KProcedureException {
 		JsonParser parser 		= new JsonParser();
         JsonObject dataJsonIn	= parser.parse(input).getAsJsonObject();
-        return call(dataJsonIn);
+        return call(pcon,dataJsonIn);
 	}
 
 	/**
@@ -141,7 +162,7 @@ public class KProcedure {
 	 * @throws KProcedureException
 	 * @throws  
 	 */
-	public JsonObject call(JsonObject inputJson) throws KProcedureException  {
+	public JsonObject call(Connection pcon,JsonObject inputJson) throws KProcedureException  {
        
 		JsonObject 		 out			= new JsonObject();        
         String 			 sqlCall		= "";
@@ -165,11 +186,11 @@ public class KProcedure {
         }
         
         //check if procedure definitions are loaded
-        if (parameters==null) loadDefinitionFromDatabase();
+        if (parameters==null) loadDefinitionFromDatabase(pcon);
 
     	//Prepare call
         try {
-        	log.log(Level.INFO,"Prepare call {0} start",pProcedure);
+        	log.log(Level.INFO,"Prepare call {0} start",getpProcedure());
 	        int FixPosition=1;
 	        for (KMetaObj obj :parameters) {        
 	        	//Tables IN, need temporary table 
@@ -231,7 +252,7 @@ public class KProcedure {
 	        	}
 	        }
 	        if (callParms.endsWith(",")) callParms=callParms.substring(0, callParms.length()-1);
-	        log.log(Level.INFO,"Prepare call {0} end",pProcedure);
+	        log.log(Level.INFO,"Prepare call {0} end",getpProcedure());
 	    //end prepare call
     	}catch (Exception er) {
     		throw new KProcedureException("can't prepare call by unmanaged exception",er);
@@ -241,31 +262,31 @@ public class KProcedure {
         try {                
 	        //Execute create temporary tables
 	        if (tempCreaTables.size()>0) {
-	        	log.log(Level.INFO,"Execute call {0} temporary tables create start",pProcedure);
+	        	log.log(Level.INFO,"Execute call {0} temporary tables create start",getpProcedure());
 				try (Statement stmt = pcon.createStatement();) {
 					for (String temptable:tempCreaTables) { 
 						stmt.addBatch(temptable);
 					}
 					stmt.executeBatch();
 				} 
-				log.log(Level.INFO,"Execute call {0} temporary tables create end",pProcedure);
+				log.log(Level.INFO,"Execute call {0} temporary tables create end",getpProcedure());
 	        }
 			
 	        //Execute insert temporary tables
 	        if (tempInsTables.size()>0) {
-	        	log.log(Level.INFO,"Execute call {0} temporary tables insert start",pProcedure);
+	        	log.log(Level.INFO,"Execute call {0} temporary tables insert start",getpProcedure());
 				try (Statement stmt = pcon.createStatement();) {
 					for (String temptable:tempInsTables) { 
 						stmt.addBatch(temptable);
 					}
 					stmt.executeBatch();
 				} 
-				log.log(Level.INFO,"Execute call {0} temporary tables insert end",pProcedure);
+				log.log(Level.INFO,"Execute call {0} temporary tables insert end",getpProcedure());
 	        }
 	        
 	    	//Call database procedure
-	    	sqlCall=String.format("{call %s.\"%s\" ( %s )} ",pSchema,pProcedure,callParms);    	
-	        log.log(Level.INFO,"Execute call {0} prepareCall={1}",new Object[]{ pProcedure, sqlCall }); 
+	    	sqlCall=String.format("{call %s.\"%s\" ( %s )} ",getpSchema(),getpProcedure(),callParms);    	
+	        log.log(Level.INFO,"Execute call {0} prepareCall={1}",new Object[]{ getpProcedure(), sqlCall }); 
 	    	try (CallableStatement  st = pcon.prepareCall(sqlCall)) {				
 				for (KMetaObj obj :parameters) { 
 					if (!obj.DataType.equals(table_type)) {
@@ -334,7 +355,7 @@ public class KProcedure {
 				}
 				st.executeUpdate();		
 				//Read Scalar out
-				log.log(Level.INFO,"Execute call {0} read out parameter scalar",pProcedure); 
+				log.log(Level.INFO,"Execute call {0} read out parameter scalar",getpProcedure()); 
 				for (KMetaObj obj :parameters) { 						
 					if (!obj.DataType.equals(table_type)) {
 						if (obj.Type.equals("OUT") || obj.Type.equals("INOUT")) {
@@ -369,7 +390,7 @@ public class KProcedure {
 					}
 				}
 				//Read Tables out
-				log.log(Level.INFO,"Execute call {0} read out parameter tables start",pProcedure); 
+				log.log(Level.INFO,"Execute call {0} read out parameter tables start",getpProcedure()); 
 				do {
 					int resultCount=0;
 					try (ResultSet rs = st.getResultSet();) {
@@ -426,14 +447,14 @@ public class KProcedure {
 						}
 					}
 				} while (st.getMoreResults()); 
-				log.log(Level.INFO,"Execute call {0} read out parameter tables end",pProcedure); 		   
+				log.log(Level.INFO,"Execute call {0} read out parameter tables end",getpProcedure()); 		   
 			}
 		//end execute call
         }catch (SQLException er) {
-        	log.log(Level.SEVERE,"can't execute call {0} by SQL exception",pProcedure);
+        	log.log(Level.SEVERE,"can't execute call "+getpProcedure()+" by SQL exception");
     		throw new KProcedureException("can't execute call by SQL exception",er);
         }catch (ParseException er) {
-        	log.log(Level.SEVERE,"can't execute call {0} by Parse exception",pProcedure);
+        	log.log(Level.SEVERE,"can't execute call "+getpProcedure()+" by Parse exception");
     		throw new KProcedureException("can't execute call by Parse exception",er);      
         }finally {
         	 //Remove temporary tables
@@ -451,6 +472,38 @@ public class KProcedure {
         	}
 		}   
 		return out;		
+	}
+
+	/**
+	 * 
+	 * @return
+	 */
+	public String getpSchema() {
+		return pSchema;
+	}
+
+	/**
+	 * 
+	 * @param pSchema
+	 */
+	public void setpSchema(String pSchema) {
+		this.pSchema = pSchema;
+	}
+
+	/**
+	 * 
+	 * @return
+	 */
+	public String getpProcedure() {
+		return pProcedure;
+	}
+
+	/**
+	 * 
+	 * @param pProcedure
+	 */
+	public void setpProcedure(String pProcedure) {
+		this.pProcedure = pProcedure;
 	}
 
 }
