@@ -3,21 +3,13 @@ package cl.kaiser.odata;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 
-import org.antlr.v4.runtime.ANTLRInputStream;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.tree.ParseTree;
-
 import com.google.gson.stream.JsonWriter;
-
-import cl.kaiser.odata.gen.OdataFilterLexer;
-import cl.kaiser.odata.gen.OdataFilterParser;
 
 public class OdataImpSql {
 
@@ -33,27 +25,11 @@ public class OdataImpSql {
 			long skip, 
 			boolean inlinecount //count first
 	) throws SQLException, IOException 
-	{
-		
-		String query="";
-		String cols="*";	
-		String wfilter="";
-		if (select!=null) select=cols;
-		if (filter!=null) {
-			ANTLRInputStream input = new ANTLRInputStream(filter);
-			OdataFilterLexer lexer = new OdataFilterLexer(input);
-			CommonTokenStream tokens = new CommonTokenStream(lexer);
-			OdataFilterParser parser = new OdataFilterParser(tokens);
-			ParseTree tree = parser.prog();
-			OdataFilterSql eval = new OdataFilterSql();	
-			wfilter=eval.visit(tree);		
-		}
-		query="select "+cols+" from "+object+" "+wfilter;
-		if (orderby!=null) query+=" order by "+orderby;
-		if (top>0) query+=" limit "+top;
-		if (skip>0) query+=" offset "+skip;				
-		long duration=System.currentTimeMillis();				
-		
+	{		
+		long duration=System.currentTimeMillis();	
+		OdataFilterSql odata = new OdataFilterSql(filter);
+		odata.Parser();
+		long pduration=System.currentTimeMillis()-duration;	
 		try (OutputStreamWriter out= new OutputStreamWriter(stream, "UTF-8"); JsonWriter writer = new JsonWriter(out)) {
 			if (callback!=null) { out.write(callback+"("); out.flush(); }
 			writer.beginObject();
@@ -61,9 +37,7 @@ public class OdataImpSql {
 			writer.beginObject();
 			if (inlinecount) {
 				long records=0;
-				String queryInline="select count(1) from "+object+" "+wfilter;
-				try (PreparedStatement stm=con.prepareStatement(queryInline)) {
-					//TODO: Pendiente ?,?,? en stament
+				try (PreparedStatement stm=odata.getCountStatement(con, object)) {
 					try (ResultSet rs=stm.executeQuery()) {			
 						if(rs.next()) {
 							records=rs.getLong(1);
@@ -72,8 +46,7 @@ public class OdataImpSql {
 				}
 				writer.name("__count").value(records);
 			}
-			try (PreparedStatement stm=con.prepareStatement(query)) {
-				//TODO: Pendiente ?,?,? en stament
+			try (PreparedStatement stm=odata.getStatement(con, object, select, orderby, top, skip)) {
 				try (ResultSet rs=stm.executeQuery()) {				
 						ResultSetMetaData rsmd = rs.getMetaData();
 						writer.name("results");
@@ -133,8 +106,9 @@ public class OdataImpSql {
 					
 				}			
 			}
-			duration=System.currentTimeMillis()-duration;	
-			writer.name("duration").value(duration);
+			duration=System.currentTimeMillis()-duration;	 
+			writer.name("ParserDuration").value(pduration);
+			writer.name("TotalDuration").value(duration);
 			writer.endObject();
 			writer.endObject();
 			writer.flush();
