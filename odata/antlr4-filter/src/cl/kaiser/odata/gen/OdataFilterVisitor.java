@@ -136,15 +136,37 @@ public interface OdataFilterVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitSubstringof(OdataFilterParser.SubstringofContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link OdataFilterParser#condleftexpr}.
+	 * Visit a parse tree produced by the {@code toDatetime}
+	 * labeled alternative in {@link OdataFilterParser#condexpr}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
-	T visitCondleftexpr(OdataFilterParser.CondleftexprContext ctx);
+	T visitToDatetime(OdataFilterParser.ToDatetimeContext ctx);
 	/**
-	 * Visit a parse tree produced by {@link OdataFilterParser#condrightexpr}.
+	 * Visit a parse tree produced by the {@code toLower}
+	 * labeled alternative in {@link OdataFilterParser#condexpr}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
-	T visitCondrightexpr(OdataFilterParser.CondrightexprContext ctx);
+	T visitToLower(OdataFilterParser.ToLowerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code toUpper}
+	 * labeled alternative in {@link OdataFilterParser#condexpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitToUpper(OdataFilterParser.ToUpperContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code toField}
+	 * labeled alternative in {@link OdataFilterParser#condexpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitToField(OdataFilterParser.ToFieldContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link OdataFilterParser#field}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitField(OdataFilterParser.FieldContext ctx);
 }
